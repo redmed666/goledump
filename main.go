@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/richardlehane/mscfb"
@@ -14,7 +15,7 @@ import (
 
 var (
 	olefilepath = ""
-	selectItem  = ""
+	selectItem  = 0
 )
 
 func findCompression(data []byte) []int {
@@ -65,7 +66,6 @@ func decompressChunk(compressedChunk []byte) ([]byte, []byte) {
 	size := (header & 0xFFF) + 3                                        // WTF?
 	flagCompressed := header & 0x8000                                   // WTF?
 	data := compressedChunk[2 : 2+size-2]
-	fmt.Println(len(data))
 	if flagCompressed == 0 {
 		return data, compressedChunk[size:]
 	}
@@ -171,7 +171,10 @@ func run() {
 	doc, err := mscfb.New(file)
 	checkError(err)
 
+	entryNumber := 0
+
 	for entry, err := doc.Next(); err == nil; entry, err = doc.Next() {
+		entryNumber += 1
 		foundCompr := ""
 		buf := make([]byte, entry.Size)
 		i, _ := doc.Read(buf)
@@ -180,11 +183,19 @@ func run() {
 			indexCompressedData := findCompression(buf[:i])
 			if indexCompressedData != nil {
 				foundCompr = "M"
-				//_, result := decompress(buf[indexCompressedData[0]-3 : i])
-				//fmt.Println(result)
+				if selectItem == entryNumber {
+					result, data := decompress(buf[indexCompressedData[0]-3 : i])
+					if result == true {
+						fmt.Println(data)
+					} else {
+						fmt.Println("Could not decompress item selected")
+						os.Exit(1)
+					}
+				}
 			}
-			if selectItem == "" {
-				fmt.Println(foundCompr+"\t | \t", entry.Name)
+
+			if selectItem == 0 {
+				fmt.Println(strconv.Itoa(entryNumber)+"\t | \t"+foundCompr+"\t | \t", entry.Name)
 			}
 		}
 	}
@@ -203,7 +214,7 @@ func usage() {
 
 func init() {
 	flag.StringVar(&olefilepath, "olefilepath", "", "OLE file path")
-	flag.StringVar(&selectItem, "select", "", "select item number for dumping")
+	flag.IntVar(&selectItem, "select", 0, "select item number for dumping")
 }
 
 func main() {
