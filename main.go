@@ -135,7 +135,9 @@ func decompress(compressedData []byte) (bool, string) {
 		}
 		decompressed += string(decompressedChunck)
 	}
-	return true, strings.Replace(decompressed, "\r\n", "\n", -1)
+	decompressed = strings.Replace(decompressed, "\r\n", "\n", -1)
+	decompressed = strings.Replace(decompressed, "\x00\x00", "", -1)
+	return true, decompressed
 }
 
 func searchAndDecompressSub(data []byte) (bool, string) {
