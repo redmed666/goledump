@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/richardlehane/mscfb"
@@ -197,7 +196,7 @@ func run() {
 			}
 
 			if selectItem == 0 {
-				fmt.Println(strconv.Itoa(entryNumber)+"\t | \t"+foundCompr+"\t | \t", entry.Name)
+				fmt.Println(entryNumber, "\t", foundCompr, "\t", entry.Size, "\t\t", entry.Name)
 			}
 		}
 	}
