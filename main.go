@@ -139,24 +139,6 @@ func decompress(compressedData []byte) (bool, string) {
 	return true, decompressed
 }
 
-func searchAndDecompressSub(data []byte) (bool, string) {
-	position := findCompression(data)
-	if position == nil {
-		return false, ""
-	}
-	compressedData := data[position[0]-3:]
-	return decompress(compressedData)
-}
-
-func searchAndDecompress(data []byte) string {
-	result, decompress := searchAndDecompressSub(data)
-	if result == true {
-		return decompress
-	} else {
-		return ""
-	}
-}
-
 func checkError(err error) {
 	if err != nil {
 		log.Fatal(err)
