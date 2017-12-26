@@ -14,6 +14,7 @@ import (
 
 var (
 	olefilepath = ""
+	selectItem  = ""
 )
 
 func findCompression(data []byte) []int {
@@ -179,20 +180,36 @@ func run() {
 			indexCompressedData := findCompression(buf[:i])
 			if indexCompressedData != nil {
 				foundCompr = "M"
-				_, result := decompress(buf[indexCompressedData[0]-3 : i])
-				fmt.Println(result)
+				//_, result := decompress(buf[indexCompressedData[0]-3 : i])
+				//fmt.Println(result)
 			}
-			fmt.Println(foundCompr+"\t | \t", entry.Name)
+			if selectItem == "" {
+				fmt.Println(foundCompr+"\t | \t", entry.Name)
+			}
 		}
 	}
 
 }
 
+func usage() {
+	message := ""
+	message += "missing arguments.\n"
+	message += "Example of usage:\n"
+	message += "goledump --olefilepath /path/to/olefile\t\t\t\t\t Show different items in the document\n"
+	message += "goledump --olefilepath /path/to/olefile --select 8\t\t\t Dump the element number 8"
+	fmt.Println(message)
+	os.Exit(0)
+}
+
 func init() {
 	flag.StringVar(&olefilepath, "olefilepath", "", "OLE file path")
+	flag.StringVar(&selectItem, "select", "", "select item number for dumping")
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		usage()
+	}
 	flag.Parse()
 	run()
 }
