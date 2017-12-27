@@ -1,8 +1,10 @@
 package main
 
 import (
+	"archive/zip"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -13,10 +15,14 @@ import (
 )
 
 var (
-	olefilepath = ""
-	selectItem  = 0
+	olefilepath  = ""
+	selectItem   = 0
+	fatal        = true
+	notFatal     = false
+	olefileMagic = []byte{'\xD0', '\xCF', '\x11', '\xE0'}
 )
 
+// VBA macro source code is compressed in a stream
 func findCompression(data []byte) []int {
 	regexAttr := regexp.MustCompile("\x00Attribut\x00e ")
 	if foundIndex := regexAttr.FindIndex(data); foundIndex != nil {
@@ -61,10 +67,13 @@ func decompressChunk(compressedChunk []byte) ([]byte, []byte) {
 		return nil, nil
 	}
 
-	header := int(compressedChunk[0]) + (int(compressedChunk[1]))*0x100 // WFT?
+	header := int(compressedChunk[0]) + (int(compressedChunk[1]))*0x100 // Macro = 01 10B2 => put the header in the correct order => B210
 	size := (header & 0xFFF) + 3                                        // WTF?
-	flagCompressed := header & 0x8000                                   // WTF?
+	fmt.Printf("size = %d\n", size)
+	flagCompressed := header & 0x8000 // WTF?
+	fmt.Printf("%x\n", flagCompressed)
 	data := compressedChunk[2 : 2+size-2]
+
 	if flagCompressed == 0 {
 		return data, compressedChunk[size:]
 	}
@@ -139,25 +148,39 @@ func decompress(compressedData []byte) (bool, string) {
 	return true, decompressed
 }
 
-func checkError(err error) {
-	if err != nil {
-		log.Fatal(err)
+func checkError(err error, errAllowed bool) bool {
+	if err != nil && errAllowed == notFatal {
+		log.Println(err)
+		return true
+	} else if err != nil && errAllowed == fatal {
+		log.Fatalln(err)
 	}
+	return false
 }
 
-func run() {
-	file, err := os.Open(olefilepath)
-	checkError(err)
+func openFile() (*os.File, *zip.ReadCloser) {
+	reader, err := zip.OpenReader(olefilepath)
+	if err != nil {
+		// we don't care if it's not zipped, not important
+		file, err := os.Open(olefilepath)
+		checkError(err, fatal)
+		return file, nil
+	}
+	return nil, reader
 
-	defer file.Close()
+}
 
+func processOle(file *os.File) {
 	doc, err := mscfb.New(file)
-	checkError(err)
+	resultErr := checkError(err, notFatal)
+	if resultErr == true {
+		return
+	}
 
 	entryNumber := 0
 
 	for entry, err := doc.Next(); err == nil; entry, err = doc.Next() {
-		entryNumber += 1
+		entryNumber++
 		foundCompr := ""
 		buf := make([]byte, entry.Size)
 		i, _ := doc.Read(buf)
@@ -176,11 +199,48 @@ func run() {
 					}
 				}
 			}
+		}
+		if selectItem == 0 {
+			fmt.Println(entryNumber, "\t", foundCompr, "\t", entry.Size, "\t\t", entry.Name)
+		}
+	}
+}
 
-			if selectItem == 0 {
-				fmt.Println(entryNumber, "\t", foundCompr, "\t", entry.Size, "\t\t", entry.Name)
+func run() {
+	// TODO: Test zip file and extract useful content
+	file, zFiles := openFile()
+	if file == nil {
+		for _, zFile := range zFiles.File {
+			rc, err := zFile.Open()
+			checkError(err, fatal)
+			buf := make([]byte, zFile.UncompressedSize)
+			rc.Read(buf)
+			magic := buf[0:4]
+			magicCounter := 0
+			for index := range magic {
+				if magic[index] == olefileMagic[index] {
+					magicCounter++
+				}
+				if magicCounter == 4 {
+					if len(strings.Split(zFile.Name, "/")) > 1 {
+						errMkdir := os.MkdirAll("./"+zFile.Name, 0777)
+						checkError(errMkdir, true)
+					}
+					tmpfile, err := ioutil.TempFile(".", zFile.Name)
+					checkError(err, fatal)
+					_, errTmp := tmpfile.Write(buf)
+					checkError(errTmp, fatal)
+					rc.Close()
+					processOle(tmpfile)
+					//os.Remove(tmpfile.Name())
+					//os.RemoveAll(strings.Split(zFile.Name, "/")[0])
+				}
 			}
 		}
+
+	} else {
+		processOle(file)
+		file.Close()
 	}
 
 }
